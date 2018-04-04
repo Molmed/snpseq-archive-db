@@ -27,7 +27,7 @@ class TestDb(AsyncHTTPTestCase):
         return Application(routes())
 
     def go(self, target, method, body=""):
-        return self.fetch(self.API_BASE + target, method=method, body=json_encode(body), headers={"Content-Type": "application/json"})
+        return self.fetch(self.API_BASE + target, method=method, body=json_encode(body), headers={"Content-Type": "application/json"}, allow_nonstandard_methods=True)
 
     def create_data(self):
         for i in range(self.num_archives):
@@ -89,3 +89,14 @@ class TestDb(AsyncHTTPTestCase):
         resp = json_decode(resp.body)
         self.assertEqual(resp["status"], "created")
         self.assertEqual(resp["upload"]["id"], upload_two)
+
+    # Populating the db in a similar way as in self.create_data() does not make the data available for 
+    # the handlers, as they seem to live in an other in-memory instance of the db. Therefore a 
+    # failing test will have to do for now. 
+    def test_failing_fetch_random_unverified_archive(self):
+        # I.e. our lookback window is [today - 5 - 1, today - 1] days. 
+        body = {"age": "5", "safety_margin": "1"}
+        resp = self.go("/randomarchive", method="GET", body=body)
+        self.assertEqual(resp.code, 500)
+    
+

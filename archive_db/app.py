@@ -1,7 +1,7 @@
 import datetime
 
 from archive_db.models.Model import init_db, Archive, Upload, Verification, Removal
-from archive_db.handlers.DbHandlers import UploadHandler, VerificationHandler, RemovalHandler, VersionHandler
+from archive_db.handlers.DbHandlers import UploadHandler, VerificationHandler, RemovalHandler, VersionHandler, RandomUnverifiedArchiveHandler
 
 from arteria.web.app import AppService
 from peewee import *
@@ -19,9 +19,9 @@ def routes(**kwargs):
     return [
         url(r"/api/1.0/version", VersionHandler, name="version", kwargs=kwargs),
         url(r"/api/1.0/upload", UploadHandler, name="upload"),
-        url(r"/api/1.0/verifification/([\w_-]+)",
-            VerificationHandler, name="verification", kwargs=kwargs),
-        url(r"/api/1.0/removal/([\w_-]+)", RemovalHandler, name="removal", kwargs=kwargs)
+        url(r"/api/1.0/verification", VerificationHandler, name="verification"),
+        url(r"/api/1.0/randomarchive", RandomUnverifiedArchiveHandler, name="randomarchive"),
+        url(r"/api/1.0/removal", RemovalHandler, name="removal")
     ]
 
 

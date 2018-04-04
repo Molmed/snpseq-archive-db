@@ -1,7 +1,10 @@
 from peewee import *
 
-# TODO: Shall we log failed operations? (not uploaded OK, not verified OK)
-# TODO: Shall we have anything to do with staging operations?
+# For schema migrations, see http://docs.peewee-orm.com/en/latest/peewee/database.html#schema-migrations
+# and http://docs.peewee-orm.com/en/latest/peewee/playhouse.html#migrate
+#
+# Make sure that we *always*, as extra security, take a backup of the previous
+# db before doing a migration. We should also take continous backups
 
 db_proxy = Proxy()
 
@@ -48,8 +51,13 @@ class Removal(ChildModel):
     archive = ForeignKeyField(Archive, related_name="removals")
     timestamp = DateTimeField()
 
-# For schema migrations, see http://docs.peewee-orm.com/en/latest/peewee/database.html#schema-migrations
-# and http://docs.peewee-orm.com/en/latest/peewee/playhouse.html#migrate
-#
-# Make sure that we *always*, as extra security, take a backup of the previous
-# db before doing a migration. We should also take continous backups
+    """
+    To let archive-remove better support archives staged/marked/scheduled for removal I envision that
+    one could modify this to something like the following instead: 
+
+        archive = ForeignKeyField(Archive, related_name="removals")
+        done = BooleanField(default=False)      # False = archive has been scheduled for removal; True = archive has been removed.
+        timestamp_scheduled = DateTimeField()   # Or one can just let the queries look to see which timestamp has been filled with a value.
+        timestamp_done = DateTimeField()
+    """
+

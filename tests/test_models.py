@@ -97,6 +97,6 @@ class TestDb(AsyncHTTPTestCase):
         # I.e. our lookback window is [today - 5 - 1, today - 1] days. 
         body = {"age": "5", "safety_margin": "1"}
         resp = self.go("/randomarchive", method="GET", body=body)
-        self.assertEqual(resp.code, 500)
+        self.assertEqual(resp.code, 204)
     
 

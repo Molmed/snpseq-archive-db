@@ -127,7 +127,7 @@ class RandomUnverifiedArchiveHandler(BaseHandler):
         else:
             msg = "No unverified archives uploaded between {} and {} was found!".format(
                     from_timestamp.strftime("%Y-%m-%d %H:%M:%S"), to_timestamp.strftime("%Y-%m-%d %H:%M:%S"))
-            raise HTTPError(500, msg)
+            self.set_status(204, reason=msg)
 
 
 # TODO: We might have to add logic in some of the services

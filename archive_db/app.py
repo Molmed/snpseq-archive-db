@@ -37,5 +37,6 @@ def start():
 
     app_svc.start(routes(config=app_svc.config_svc))
 
+
 if __name__ == '__main__':
     start()

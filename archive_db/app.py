@@ -17,7 +17,7 @@ def routes(**kwargs):
     """
 
     return [
-        url(r"/api/1.0/version", VersionHandler, name="version", kwargs=kwargs),
+        url(r"/api/1.0/version", VersionHandler, name="version"),
         url(r"/api/1.0/upload", UploadHandler, name="upload"),
         url(r"/api/1.0/verification", VerificationHandler, name="verification"),
         url(r"/api/1.0/randomarchive", RandomUnverifiedArchiveHandler, name="randomarchive"),
@@ -35,6 +35,7 @@ def start():
     init_db(db_path)
 
     app_svc.start(routes(config=app_svc.config_svc))
+
 
 if __name__ == '__main__':
     start()

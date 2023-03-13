@@ -1,7 +1,5 @@
 import datetime
-
-from playhouse.test_utils import test_database
-from peewee import *
+from importlib.metadata import version
 
 from archive_db.models.Model import Archive, Upload, Verification, Removal, init_db
 from archive_db.app import routes
@@ -99,4 +97,8 @@ class TestDb(AsyncHTTPTestCase):
         resp = self.go("/randomarchive", method="GET", body=body)
         self.assertEqual(resp.code, 204)
     
-
+    def test_version(self):
+        resp = self.go("/version", method="GET")
+        self.assertEqual(resp.code, 200)
+        resp = json_decode(resp.body)
+        self.assertEqual(resp["version"], version("archive_db"))

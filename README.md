@@ -1,17 +1,19 @@
 SNPSEQ Archive DB
 ==================
 
-A self contained (Tornado) REST service that serves as a frontend for a simple SQL db that contains the state of our uploads, verifications and removals done by other SNPSEQ archive services.  
+A self contained (Tornado) REST service that serves as a frontend for a simple SQL db that contains the state of our
+uploads, verifications and removals done by other SNPSEQ archive services.
 
 Trying it out
 -------------
 
-    python3 -m pip install pipenv
-    pipenv install --deploy
+    python3 -m venv --upgrade-deps .venv
+    source .venv/bin/activate
+    pip install .
 
 Try running it:
 
-     pipenv run ./archive-db-ws --config=config/ --port=8888 --debug
+     archive-db-ws --config=config/ --port=8888 --debug
 
 And then you can find a simple API documentation by going to:
 
@@ -20,8 +22,9 @@ And then you can find a simple API documentation by going to:
 Running tests
 -------------
 
-    pipenv install --dev
-    pipenv run nosetests tests/
+    source .venv/bin/activate
+    pip install -e .[test]
+    nosetests tests/
 
 
 REST endpoints

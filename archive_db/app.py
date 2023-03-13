@@ -1,10 +1,9 @@
-import datetime
 
-from archive_db.models.Model import init_db, Archive, Upload, Verification, Removal
-from archive_db.handlers.DbHandlers import UploadHandler, VerificationHandler, RemovalHandler, VersionHandler, RandomUnverifiedArchiveHandler
+from archive_db.models.Model import init_db
+from archive_db.handlers.DbHandlers import UploadHandler, VerificationHandler, RemovalHandler, \
+    VersionHandler, RandomUnverifiedArchiveHandler, ViewHandler
 
 from arteria.web.app import AppService
-from peewee import *
 from tornado.web import URLSpec as url
 
 
@@ -21,7 +20,8 @@ def routes(**kwargs):
         url(r"/api/1.0/upload", UploadHandler, name="upload"),
         url(r"/api/1.0/verification", VerificationHandler, name="verification"),
         url(r"/api/1.0/randomarchive", RandomUnverifiedArchiveHandler, name="randomarchive"),
-        url(r"/api/1.0/removal", RemovalHandler, name="removal")
+        url(r"/api/1.0/removal", RemovalHandler, name="removal"),
+        url(r"/api/1.0/view", ViewHandler, name="view")
     ]
 
 

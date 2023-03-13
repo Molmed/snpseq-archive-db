@@ -3,26 +3,28 @@ import os
 
 from arteria.web.handlers import BaseRestHandler
 
-from archive_db.models.Model import Archive, Upload, Verification, Removal
+from archive_db.models.Model import Archive, Upload, Verification
 from importlib.metadata import version
 
 from peewee import *
 from tornado import gen
-from tornado.web import RequestHandler, HTTPError
-from tornado.escape import json_decode, json_encode
+from tornado.web import HTTPError
+from tornado.escape import json_decode
 
 
 class BaseHandler(BaseRestHandler):
     # BaseRestHandler.body_as_object() does not work well
     # in Python 3 due to string vs byte strings.
 
-    def decode(self, required_members=[]):
+    def decode(self, required_members=None):
         obj = json_decode(self.request.body)
 
-        for member in required_members:
-            if member not in obj:
-                raise HTTPError(400, "Expecting '{0}' in the JSON body".format(member))
+        if required_members:
+            for member in required_members:
+                if member not in obj:
+                    raise HTTPError(400, "Expecting '{0}' in the JSON body".format(member))
         return obj
+
 
 
 class UploadHandler(BaseHandler):
@@ -187,6 +189,44 @@ class RemovalHandler(BaseHandler):
             - the set of Archives belonging to those Uploads should be OK to remove 
         """
         pass
+
+
+class ViewHandler(BaseHandler):
+
+    @gen.coroutine
+    def get(self):
+        """
+        Returns all archives recorded in the database.
+
+        :return all archives recorded in the database
+        """
+
+        query = (
+            Archive.select(
+                Archive.host,
+                Archive.path,
+                Archive.description,
+                Upload.timestamp
+            ).join(
+                Upload
+            ).order_by(
+                Upload.timestamp.desc(),
+                Archive.path.asc()
+            ).dicts()
+        )
+
+        if query:
+            self.write_json({
+                "archives": [{
+                    "host": row["host"],
+                    "path": row["path"],
+                    "description": row["description"],
+                    "timestamp": row["timestamp"].isoformat()}
+                    for row in query
+                ]})
+        else:
+            msg = "no entries found in database"
+            self.set_status(204, reason=msg)
 
 
 class VersionHandler(BaseHandler):

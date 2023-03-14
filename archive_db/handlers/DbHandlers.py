@@ -194,13 +194,16 @@ class RemovalHandler(BaseHandler):
 class ViewHandler(BaseHandler):
 
     @gen.coroutine
-    def get(self):
+    def get(self, limit=None):
         """
         Returns all archives recorded in the database.
 
         :return all archives recorded in the database
         """
-
+        try:
+            limit = int(limit)
+        except ValueError:
+            limit = None
         query = (
             Archive.select(
                 Archive.host,
@@ -212,6 +215,8 @@ class ViewHandler(BaseHandler):
             ).order_by(
                 Upload.timestamp.desc(),
                 Archive.path.asc()
+            ).limit(
+                limit
             ).dicts()
         )
 

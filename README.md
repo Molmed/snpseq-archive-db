@@ -13,11 +13,11 @@ Trying it out
 
 Try running it:
 
-     archive-db-ws --config=config/ --port=8888 --debug
+     archive-db-ws --config=config/ --debug
 
 And then you can find a simple API documentation by going to:
 
-    http://localhost:8888/api/1.0
+    http://localhost:8888/api
 
 Running tests
 -------------
@@ -41,3 +41,15 @@ Creating a new Verification (and associated Archive if none exists):
 Getting a randomly picked Archive that has been uploaded within a certain timespan, but never verified before: 
 
     curl -i -X "GET" -d '{"age": "7", "safety_margin": "3"}' http://localhost:8888/api/1.0/randomarchive
+
+Print the records from the database:
+
+    curl -i -X "GET" http://localhost:8888/api/1.0/view
+
+Print the N (positive integer) latest uploads from the database:
+
+    curl -i -X "GET" http://localhost:8888/api/1.0/view/N
+
+Query the database for uploads matching specific criteria:
+    
+    curl -i -X "POST" -d '{"host": "biotank", "before_date": "2023-03-01", "verified": "False"}' http://localhost:8888/api/1.0/query

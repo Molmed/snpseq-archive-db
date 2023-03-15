@@ -21,7 +21,8 @@ def routes(**kwargs):
         url(r"/api/1.0/verification", VerificationHandler, name="verification"),
         url(r"/api/1.0/randomarchive", RandomUnverifiedArchiveHandler, name="randomarchive"),
         url(r"/api/1.0/removal", RemovalHandler, name="removal"),
-        url(r"/api/1.0/view/?([0-9]*)", ViewHandler, name="view")
+        url(r"/api/1.0/view/?([0-9]*)", ViewHandler, name="view"),
+        url(r"/api/1.0/query", ViewHandler, name="query")
     ]
 
 

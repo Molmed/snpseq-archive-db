@@ -128,6 +128,9 @@ class TestDb(AsyncHTTPTestCase):
         self.assertEqual(resp["version"], version("archive_db"))
 
     def test_view(self):
+        resp = self.go("/view", method="GET")
+        self.assertEqual(resp.code, 204)
+
         expected_archives = self.create_data()
         resp = self.go("/view", method="GET")
         self.assertEqual(resp.code, 200)
@@ -211,3 +214,11 @@ class TestDb(AsyncHTTPTestCase):
                 "path": "archive-"
             })
         _assert_response(resp, 200, archives)
+
+        resp = self.go(
+            "/query",
+            method="POST",
+            body={
+                "path": "this-will-not-match-anything"
+            })
+        self.assertEqual(resp.code, 204)

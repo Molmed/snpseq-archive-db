@@ -3,7 +3,7 @@ import os
 
 from arteria.web.handlers import BaseRestHandler
 
-from archive_db.models.Model import Archive, Upload, Verification
+from archive_db.models.Model import Archive, Removal, Upload, Verification
 from importlib.metadata import version
 
 from peewee import *
@@ -201,11 +201,14 @@ class ViewHandler(BaseHandler):
             Archive.path,
             Archive.description,
             Upload.timestamp.alias("uploaded"),
-            Verification.timestamp.alias("verified")
+            Verification.timestamp.alias("verified"),
+            Removal.timestamp.alias("removed")
         ).join(
-            Upload
+            Upload, JOIN.LEFT_OUTER, on=(Upload.archive_id == Archive.id)
         ).join(
             Verification, JOIN.LEFT_OUTER, on=(Verification.archive_id == Archive.id)
+        ).join(
+            Removal, JOIN.LEFT_OUTER, on=(Removal.archive_id == Archive.id)
         ).order_by(
             Upload.timestamp.desc(),
             Archive.path.asc())
@@ -218,8 +221,9 @@ class ViewHandler(BaseHandler):
                     "host": row["host"],
                     "path": row["path"],
                     "description": row["description"],
-                    "uploaded": row["uploaded"].isoformat(),
-                    "verified": row["verified"].isoformat() if row["verified"] else None}
+                    "uploaded": row["uploaded"].isoformat() if row["uploaded"] else None,
+                    "verified": row["verified"].isoformat() if row["verified"] else None,
+                    "removed": row["removed"].isoformat() if row["removed"] else None}
                     for row in query
                 ]})
         else:
@@ -292,6 +296,8 @@ class ViewHandler(BaseHandler):
                     Upload.timestamp >= dt.datetime.strptime(body[parameter], "%Y-%m-%d"))
             elif parameter == "verified" and body[parameter] in ["True", "False"]:
                 query = query.where(Verification.timestamp.is_null(body[parameter] == "False"))
+            elif parameter == "removed" and body[parameter] in ["True", "False"]:
+                query = query.where(Removal.timestamp.is_null(body[parameter] == "False"))
 
         query = (query.dicts())
         self._do_query(query)

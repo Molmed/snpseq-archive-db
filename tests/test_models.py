@@ -1,8 +1,5 @@
 import datetime
 
-from playhouse.test_utils import test_database
-from peewee import *
-
 import archive_db.handlers.DbHandlers
 from archive_db.models.Model import Archive, Upload, Verification, Removal, init_db
 from archive_db.app import routes
@@ -171,6 +168,12 @@ class TestDb(AsyncHTTPTestCase):
         resp = self.go(
             "/query",
             method="POST",
+            body={})
+        _assert_response(resp, 200, archives)
+
+        resp = self.go(
+            "/query",
+            method="POST",
             body={"verified": "True"})
         expected_archives = list(filter(lambda x: x["verified"] is not None, archives))
         _assert_response(resp, 200, expected_archives)
@@ -217,6 +220,20 @@ class TestDb(AsyncHTTPTestCase):
                 "path": "archive-"
             })
         _assert_response(resp, 200, archives)
+
+        resp = self.go(
+            "/query",
+            method="POST",
+            body={
+                "description": f"descr-{self.second_archive}",
+                "removed": True
+            })
+        expected_archives = list(
+            filter(
+                lambda x: x["description"] == f"archive-descr-{self.second_archive}" and
+                          x["removed"] is not None,
+                archives))
+        _assert_response(resp, 200, expected_archives)
 
         resp = self.go(
             "/query",

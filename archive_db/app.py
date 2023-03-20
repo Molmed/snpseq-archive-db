@@ -1,7 +1,7 @@
 
 from archive_db.models.Model import init_db
 from archive_db.handlers.DbHandlers import UploadHandler, VerificationHandler, RemovalHandler, \
-    VersionHandler, RandomUnverifiedArchiveHandler, ViewHandler
+    VersionHandler, RandomUnverifiedArchiveHandler, ViewHandler, QueryHandler
 
 from arteria.web.app import AppService
 from tornado.web import URLSpec as url
@@ -22,7 +22,7 @@ def routes(**kwargs):
         url(r"/api/1.0/randomarchive", RandomUnverifiedArchiveHandler, name="randomarchive"),
         url(r"/api/1.0/removal", RemovalHandler, name="removal"),
         url(r"/api/1.0/view/?([0-9]*)", ViewHandler, name="view"),
-        url(r"/api/1.0/query", ViewHandler, name="query")
+        url(r"/api/1.0/query", QueryHandler, name="query")
     ]
 
 

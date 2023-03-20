@@ -191,7 +191,7 @@ class RemovalHandler(BaseHandler):
         pass
 
 
-class ViewHandler(BaseHandler):
+class QueryHandlerBase(BaseHandler):
 
     @staticmethod
     def _db_query():
@@ -230,6 +230,9 @@ class ViewHandler(BaseHandler):
             msg = "no entries matching criteria found in database"
             self.set_status(204, reason=msg)
 
+
+class ViewHandler(QueryHandlerBase):
+
     @gen.coroutine
     def get(self, limit=None):
         """
@@ -243,8 +246,8 @@ class ViewHandler(BaseHandler):
         :return archives recorded in the database as a json object under the key "archives"
         """
         try:
-            limit = int(limit)
-        except ValueError:
+            limit = max(1, int(limit))
+        except (ValueError, TypeError):
             limit = None
 
         query = self._db_query()
@@ -254,6 +257,9 @@ class ViewHandler(BaseHandler):
             ).dicts()
         )
         self._do_query(query)
+
+
+class QueryHandler(QueryHandlerBase):
 
     @gen.coroutine
     def post(self):
@@ -273,31 +279,33 @@ class ViewHandler(BaseHandler):
         :param verified: (optional) if True, fetch only archives that have been successfully
         verified. If False, fetch only archives that have not been verified. If omitted, fetch
         archives regardless of verification status
+        :param removed: (optional) if True, fetch only archives that have been removed from
+        storage. If False, fetch only archives that have not been removed. If omitted, fetch
+        archives regardless of removal status
         :return archives in the database matching the criteria in the request body as a json object
         under the key "archives"
         """
         body = self.decode()
         query = self._db_query()
 
-        for parameter, condition in body.items():
-            if parameter == "path" and body[parameter]:
-                query = query.where(Archive.path.contains(body[parameter]))
-            elif parameter == "description" and body[parameter]:
-                query = query.where(Archive.description.contains(body[parameter]))
-            elif parameter == "host" and body[parameter]:
-                query = query.where(Archive.host.contains(body[parameter]))
-            elif parameter == "before_date" and body[parameter]:
-                query = query.where(
-                    Upload.timestamp <= dt.datetime.strptime(
-                        f"{body[parameter]} 23:59:59",
-                        "%Y-%m-%d %H:%M:%S"))
-            elif parameter == "after_date" and body[parameter]:
-                query = query.where(
-                    Upload.timestamp >= dt.datetime.strptime(body[parameter], "%Y-%m-%d"))
-            elif parameter == "verified" and body[parameter] in ["True", "False"]:
-                query = query.where(Verification.timestamp.is_null(body[parameter] == "False"))
-            elif parameter == "removed" and body[parameter] in ["True", "False"]:
-                query = query.where(Removal.timestamp.is_null(body[parameter] == "False"))
+        if body.get("path"):
+            query = query.where(Archive.path.contains(body["path"]))
+        if body.get("description"):
+            query = query.where(Archive.description.contains(body["description"]))
+        if body.get("host"):
+            query = query.where(Archive.host.contains(body["host"]))
+        if body.get("before_date"):
+            query = query.where(
+                Upload.timestamp <= dt.datetime.strptime(
+                    f"{body['before_date']} 23:59:59",
+                    "%Y-%m-%d %H:%M:%S"))
+        if body.get("after_date"):
+            query = query.where(
+                Upload.timestamp >= dt.datetime.strptime(body["after_date"], "%Y-%m-%d"))
+        if body.get("verified") is not None and body["verified"] in ["True", "False"]:
+            query = query.where(Verification.timestamp.is_null(body["verified"] == "False"))
+        if body.get("removed") is not None and body["removed"] in ["True", "False"]:
+            query = query.where(Removal.timestamp.is_null(body["removed"] == "False"))
 
         query = (query.dicts())
         self._do_query(query)

@@ -8,21 +8,23 @@ from archive_db import __version__ as version
 
 from peewee import *
 from tornado import gen
-from tornado.web import RequestHandler, HTTPError
-from tornado.escape import json_decode, json_encode
+from tornado.web import HTTPError
+from tornado.escape import json_decode
 
 
 class BaseHandler(BaseRestHandler):
     # BaseRestHandler.body_as_object() does not work well
     # in Python 3 due to string vs byte strings.
 
-    def decode(self, required_members=[]):
+    def decode(self, required_members=None):
         obj = json_decode(self.request.body)
 
-        for member in required_members:
-            if member not in obj:
-                raise HTTPError(400, "Expecting '{0}' in the JSON body".format(member))
+        if required_members:
+            for member in required_members:
+                if member not in obj:
+                    raise HTTPError(400, "Expecting '{0}' in the JSON body".format(member))
         return obj
+
 
 
 class UploadHandler(BaseHandler):
@@ -187,6 +189,126 @@ class RemovalHandler(BaseHandler):
             - the set of Archives belonging to those Uploads should be OK to remove 
         """
         pass
+
+
+class QueryHandlerBase(BaseHandler):
+
+    @staticmethod
+    def _db_query():
+
+        query = Archive.select(
+            Archive.host,
+            Archive.path,
+            Archive.description,
+            Upload.timestamp.alias("uploaded"),
+            Verification.timestamp.alias("verified"),
+            Removal.timestamp.alias("removed")
+        ).join(
+            Upload, JOIN.LEFT_OUTER, on=(Upload.archive_id == Archive.id)
+        ).join(
+            Verification, JOIN.LEFT_OUTER, on=(Verification.archive_id == Archive.id)
+        ).join(
+            Removal, JOIN.LEFT_OUTER, on=(Removal.archive_id == Archive.id)
+        ).order_by(
+            Upload.timestamp.desc(),
+            Archive.path.asc())
+        return query
+
+    def _do_query(self, query):
+        if query:
+            self.write_json({
+                "archives": [{
+                    "host": row["host"],
+                    "path": row["path"],
+                    "description": row["description"],
+                    "uploaded": row["uploaded"].isoformat() if row["uploaded"] else None,
+                    "verified": row["verified"].isoformat() if row["verified"] else None,
+                    "removed": row["removed"].isoformat() if row["removed"] else None}
+                    for row in query
+                ]})
+        else:
+            msg = "no entries matching criteria found in database"
+            self.set_status(204, reason=msg)
+
+
+class ViewHandler(QueryHandlerBase):
+
+    @gen.coroutine
+    def get(self, limit=None):
+        """
+        GET archives recorded in the database, sorted by upload timestamp (descending) and
+        archive path (ascending)
+
+        /view returns all archives recorded in the database
+        /view/[LIMIT] returns the LIMIT (positive integer) most recent records from database
+
+        :param limit: positive integer specifying the number of rows to limit the results to
+        :return archives recorded in the database as a json object under the key "archives"
+        """
+        try:
+            limit = max(1, int(limit))
+        except (ValueError, TypeError):
+            limit = None
+
+        query = self._db_query()
+        query = (
+            query.limit(
+                limit
+            ).dicts()
+        )
+        self._do_query(query)
+
+
+class QueryHandler(QueryHandlerBase):
+
+    @gen.coroutine
+    def post(self):
+        """
+        Retrieve archives recorded in the database, conditioned by the parameters supplied in the
+        request body and sorted by upload timestamp (descending) and archive path (ascending).
+
+        :param path: (optional) fetch archives whose path fully or partially match this string
+        :param description: (optional) fetch archives whose unique TSM description fully or
+        partially match this string
+        :param host: (optional) fetch archives that were uploaded from a host whose hostname fully
+        or partially match this string
+        :param before_date: (optional) fetch archives that were uploaded on or before this date,
+        formatted as YYYY-MM-DD
+        :param after_date: (optional) fetch archives that were uploaded on or after this date,
+        formatted as YYYY-MM-DD
+        :param verified: (optional) if True, fetch only archives that have been successfully
+        verified. If False, fetch only archives that have not been verified. If omitted, fetch
+        archives regardless of verification status
+        :param removed: (optional) if True, fetch only archives that have been removed from
+        storage. If False, fetch only archives that have not been removed. If omitted, fetch
+        archives regardless of removal status
+        :return archives in the database matching the criteria in the request body as a json object
+        under the key "archives"
+        """
+        body = self.decode()
+        query = self._db_query()
+
+        if body.get("path"):
+            query = query.where(Archive.path.contains(body["path"]))
+        if body.get("description"):
+            query = query.where(Archive.description.contains(body["description"]))
+        if body.get("host"):
+            query = query.where(Archive.host.contains(body["host"]))
+        if body.get("before_date"):
+            query = query.where(
+                Upload.timestamp <= dt.datetime.strptime(
+                    f"{body['before_date']} 23:59:59",
+                    "%Y-%m-%d %H:%M:%S"))
+        if body.get("after_date"):
+            query = query.where(
+                Upload.timestamp >= dt.datetime.strptime(body["after_date"], "%Y-%m-%d"))
+        if body.get("verified") is not None and body["verified"] in ["True", "False"]:
+            query = query.where(Verification.timestamp.is_null(body["verified"] == "False"))
+        if body.get("removed") is not None and body["removed"] in ["True", "False"]:
+            query = query.where(Removal.timestamp.is_null(body["removed"] == "False"))
+
+        query = (query.dicts())
+        self._do_query(query)
 
 
 class VersionHandler(BaseHandler):

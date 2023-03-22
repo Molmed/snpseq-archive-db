@@ -1,6 +1,6 @@
 import datetime
+from importlib.metadata import version
 
-import archive_db.handlers.DbHandlers
 from archive_db.models.Model import Archive, Upload, Verification, Removal, init_db
 from archive_db.app import routes
 
@@ -125,7 +125,7 @@ class TestDb(AsyncHTTPTestCase):
         resp = self.go("/version", method="GET")
         self.assertEqual(resp.code, 200)
         resp = json_decode(resp.body)
-        self.assertEqual(resp["version"], archive_db.handlers.DbHandlers.version)
+        self.assertEqual(resp["version"], version("archive_db"))
 
     def test_view(self):
         resp = self.go("/view", method="GET")

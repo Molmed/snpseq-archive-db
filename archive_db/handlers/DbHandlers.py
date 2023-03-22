@@ -4,7 +4,7 @@ import os
 from arteria.web.handlers import BaseRestHandler
 
 from archive_db.models.Model import Archive, Upload, Verification, Removal
-from archive_db import __version__ as version
+from importlib.metadata import version
 
 from peewee import *
 from tornado import gen
@@ -321,4 +321,4 @@ class VersionHandler(BaseHandler):
         """
         Returns the version of the checksum-service
         """
-        self.write_object({"version": version})
+        self.write_json({"version": version('archive_db')})

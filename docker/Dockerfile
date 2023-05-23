@@ -7,6 +7,7 @@ RUN \
   apt-get update && \
   apt-get install -y git && \
   sed -i -re 's/(port:).*/\1 8787/' config/app.config && \
+  rm -rf .venv && \
   python3 -m venv --upgrade-deps .venv && \
   .venv/bin/pip install --upgrade pip && \
   .venv/bin/pip install -e .[test] && \

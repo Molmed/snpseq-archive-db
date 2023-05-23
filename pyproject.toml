@@ -25,7 +25,7 @@ classifiers = [
 dependencies = [
     "peewee",
     "tornado",
-    "arteria @ git+https://github.com/arteria-project/arteria-core.git"
+    "arteria"
 ]
 
 [project.optional-dependencies]

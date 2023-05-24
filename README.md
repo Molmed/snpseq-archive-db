@@ -53,3 +53,27 @@ Print the N (positive integer) latest uploads from the database:
 Query the database for uploads matching specific criteria:
     
     curl -i -X "POST" -d '{"host": "biotank", "before_date": "2023-03-01", "verified": "False"}' http://localhost:8888/api/1.0/query
+
+Docker container
+----------------
+
+For testing purposes, you can also build a Docker container using the resources in the docker/ folder:
+
+    # build and start Docker container
+    docker/up
+
+This will build and start a Docker container that the archive-db service and listens on port 8787:
+
+    # interact with archive-verify service on port 8787
+    curl 127.0.0.1:8787/api/1.0/version
+        #   {"version": "1.2.0"}
+
+The container log output can be followed:
+
+    # follow the container log output (Ctrl+C to stop)
+    docker/log
+
+The docker container can be stopped and removed:
+
+    # stop and remove the running docker container
+    docker/down

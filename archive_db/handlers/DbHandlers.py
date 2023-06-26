@@ -71,7 +71,10 @@ class VerificationHandler(BaseHandler):
         """
         body = self.decode(required_members=["description", "path", "host"])
 
-        archive, created = Archive.get_or_create(description=body["description"], host=body["host"], path=body["path"])
+        archive, created = Archive.get_or_create(
+            description=body["description"],
+            host=body["host"],
+            path=body["path"])
 
         verification = Verification.create(archive=archive, timestamp=dt.datetime.utcnow())
 
@@ -215,6 +218,8 @@ class QueryHandlerBase(BaseHandler):
         ).join(
             Removal, JOIN.LEFT_OUTER, on=(Removal.archive_id == Archive.id)
         ).order_by(
+            Removal.timestamp.desc(),
+            Verification.timestamp.desc(),
             Upload.timestamp.desc(),
             Archive.path.asc())
         return query
@@ -226,9 +231,9 @@ class QueryHandlerBase(BaseHandler):
                     "host": row["host"],
                     "path": row["path"],
                     "description": row["description"],
-                    "uploaded": row["uploaded"].isoformat() if row["uploaded"] else None,
-                    "verified": row["verified"].isoformat() if row["verified"] else None,
-                    "removed": row["removed"].isoformat() if row["removed"] else None}
+                    "uploaded": str(row["uploaded"]) if row["uploaded"] else None,
+                    "verified": str(row["verified"]) if row["verified"] else None,
+                    "removed": str(row["removed"]) if row["removed"] else None}
                     for row in query
                 ]})
         else:
@@ -299,14 +304,14 @@ class QueryHandler(QueryHandlerBase):
             query = query.where(Archive.description.contains(body["description"]))
         if body.get("host"):
             query = query.where(Archive.host.contains(body["host"]))
-        if body.get("before_date"):
+        if body.get("uploaded_before"):
             query = query.where(
                 Upload.timestamp <= dt.datetime.strptime(
-                    f"{body['before_date']} 23:59:59",
+                    f"{body['uploaded_before']} 23:59:59",
                     "%Y-%m-%d %H:%M:%S"))
-        if body.get("after_date"):
+        if body.get("uploaded_after"):
             query = query.where(
-                Upload.timestamp >= dt.datetime.strptime(body["after_date"], "%Y-%m-%d"))
+                Upload.timestamp >= dt.datetime.strptime(body["uploaded_after"], "%Y-%m-%d"))
         if body.get("verified") is not None and body["verified"] in ["True", "False"]:
             query = query.where(Verification.timestamp.is_null(body["verified"] == "False"))
         if body.get("removed") is not None and body["removed"] in ["True", "False"]:

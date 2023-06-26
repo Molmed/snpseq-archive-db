@@ -39,10 +39,10 @@ class TestDb(AsyncHTTPTestCase):
                 "description": f"archive-descr-{i}",
                 "path": f"/data/testhost/runfolders/archive-{i}",
                 "host": "testhost",
-                "uploaded": (now - datetime.timedelta(days=i)).isoformat() if i in [
+                "uploaded": str(now - datetime.timedelta(days=i)) if i in [
                     self.first_archive, self.second_archive] else None,
-                "verified": now.isoformat() if i == self.second_archive else None,
-                "removed": now.isoformat() if i == self.second_archive else None
+                "verified": str(now) if i == self.second_archive else None,
+                "removed": str(now) if i == self.second_archive else None
             }
 
     def create_data(self, data=None):
@@ -98,40 +98,86 @@ class TestDb(AsyncHTTPTestCase):
 
     def test_failing_upload(self):
         test_data = next(self.example_data())
-        body = {"description": test_data["description"]}  # missing params
-        resp = self.go("/upload", method="POST", body=body)
+        body = {
+            "description": test_data["description"]
+        }
+        resp = self.go("/upload", method="POST", body=body) # missing params
         self.assertEqual(resp.code, 400)
 
     def test_create_upload_for_existing_archive(self):
         upload_one = 1
         upload_two = 2
 
-        body = {"description": "test-case-1", "host": "testhost", "path": "/path/to/test/archive/"}
-        resp = self.go("/upload", method="POST", body=body)
+        test_data = next(self.example_data())
+        body = {
+            "description": test_data["description"],
+            "host": test_data["host"],
+            "path": test_data["path"]
+        }
+
+        for upload_id in (upload_one, upload_two):
+            resp = self.go("/upload", method="POST", body=body)
+            resp = json_decode(resp.body)
+            self.assertEqual(resp["status"], "created")
+            self.assertEqual(resp["upload"]["description"], body["description"])
+            self.assertEqual(resp["upload"]["id"], upload_id)
+
+    def _verification_of_archive_helper(self, archive):
+
+        body = {
+            "description": archive["description"],
+            "host": archive["host"],
+            "path": archive["path"]
+        }
+
+        # recording a verification on a non-existing archive should create the archive entry
+        # on-the-fly
+        resp = self.go("/verification", method="POST", body=body)
+        self.assertEqual(resp.code, 200)
         resp = json_decode(resp.body)
         self.assertEqual(resp["status"], "created")
-        self.assertEqual(resp["upload"]["description"], body["description"])
-        self.assertEqual(resp["upload"]["id"], upload_one)
+        obs_verification = resp["verification"]
 
-        resp = self.go("/upload", method="POST", body=body)
-        resp = json_decode(resp.body)
-        self.assertEqual(resp["status"], "created")
-        self.assertEqual(resp["upload"]["id"], upload_two)
+        # query the database and ensure that one and only one archive entry exists as expected
+        resp = self.go(
+            "/query",
+            method="POST",
+            body={})
+        self.assertEqual(resp.code, 200)
+        obs_archives = json_decode(resp.body).get("archives")
+        self.assertEqual(len(obs_archives), 1)
 
-    # Populating the db in a similar way as in self.create_data() does not make the data available for 
-    # the handlers, as they seem to live in an other in-memory instance of the db. Therefore a 
-    # failing test will have to do for now. 
+        # ensure that the db field match the input data
+        for db_entity in (obs_verification, obs_archives[0]):
+            for key in ("description", "host", "path"):
+                self.assertEqual(db_entity[key], body[key])
+        self.assertEqual(obs_archives[0]["verified"], obs_verification["timestamp"])
+
+    def test_verification_of_existing_archive(self):
+        archive = next(self.example_data())
+        self.create_data(data=[archive])
+        self._verification_of_archive_helper(archive)
+
+    def test_verification_of_non_existing_archive(self):
+        archive = next(self.example_data())
+        self._verification_of_archive_helper(archive)
+
     def test_failing_fetch_random_unverified_archive(self):
-        # I.e. our lookback window is [today - 5 - 1, today - 1] days. 
+        self.create_data()
+        # I.e. our lookback window is [today - age - safety_margin, today - safety_margin] days.
         body = {"age": "5", "safety_margin": "1"}
         resp = self.go("/randomarchive", method="GET", body=body)
         self.assertEqual(resp.code, 204)
 
     def test_fetch_random_unverified_archive(self):
-        self.create_data()
+        archives = self.create_data()
         body = {"age": "1", "safety_margin": "0"}
         resp = self.go("/randomarchive", method="GET", body=body)
         self.assertEqual(resp.code, 200)
+        obs_archive = json_decode(resp.body).get("archive")
+        exp_archive = archives[self.first_archive]
+        for key in ("description", "host", "path"):
+            self.assertEqual(obs_archive[key], exp_archive[key])
 
     def test_version(self):
         resp = self.go("/version", method="GET")
@@ -201,8 +247,8 @@ class TestDb(AsyncHTTPTestCase):
             "/query",
             method="POST",
             body={
-                "before_date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                "after_date": (
+                "uploaded_before": datetime.datetime.now().strftime("%Y-%m-%d"),
+                "uploaded_after": (
                         datetime.datetime.now() - datetime.timedelta(days=self.num_archives)
                 ).strftime("%Y-%m-%d")
             })

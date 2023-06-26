@@ -291,9 +291,9 @@ class QueryHandler(QueryHandlerBase):
         partially match this string
         :param host: (optional) fetch archives that were uploaded from a host whose hostname fully
         or partially match this string
-        :param before_date: (optional) fetch archives that were uploaded on or before this date,
+        :param uploaded_before: (optional) fetch archives that were uploaded on or before this date,
         formatted as YYYY-MM-DD
-        :param after_date: (optional) fetch archives that were uploaded on or after this date,
+        :param uploaded_after: (optional) fetch archives that were uploaded on or after this date,
         formatted as YYYY-MM-DD
         :param verified: (optional) if True, fetch only archives that have been successfully
         verified. If False, fetch only archives that have not been verified. If omitted, fetch

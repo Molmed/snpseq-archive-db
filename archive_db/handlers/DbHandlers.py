@@ -82,6 +82,7 @@ class VerificationHandler(BaseHandler):
                          "path": verification.archive.path,
                          "host": verification.archive.host}})
 
+
 class RandomUnverifiedArchiveHandler(BaseHandler):
 
     @gen.coroutine
@@ -118,17 +119,21 @@ class RandomUnverifiedArchiveHandler(BaseHandler):
         result_len = query.count()
 
         if result_len > 0:
-            upload = next(query.execute())
-            archive_name = os.path.basename(os.path.normpath(upload.archive.path))
-            self.write_json({"status": "unverified", "archive":
-                            {"timestamp": str(upload.timestamp),
-                             "path": upload.archive.path,
-                             "description": upload.archive.description,
-                             "host": upload.archive.host,
-                             "archive": archive_name}})
+            for upload in query.execute():
+                archive_name = os.path.basename(os.path.normpath(upload.archive.path))
+                self.write_json({
+                    "status": "unverified",
+                    "archive": {
+                        "timestamp": str(upload.timestamp),
+                        "path": upload.archive.path,
+                        "description": upload.archive.description,
+                        "host": upload.archive.host,
+                        "archive": archive_name
+                    }
+                })
         else:
-            msg = "No unverified archives uploaded between {} and {} was found!".format(
-                    from_timestamp.strftime("%Y-%m-%d %H:%M:%S"), to_timestamp.strftime("%Y-%m-%d %H:%M:%S"))
+            msg = f"No unverified archives uploaded between {from_timestamp} and {to_timestamp} " \
+                  f"was found!"
             self.set_status(204, reason=msg)
 
 

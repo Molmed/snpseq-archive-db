@@ -32,20 +32,21 @@ class TestDb(AsyncHTTPTestCase):
             headers={"Content-Type": "application/json"},
             allow_nonstandard_methods=True)
 
-    def create_data(self):
+    def example_data(self):
         now = datetime.datetime.now()
-        archives = [
-            {
+        for i in range(self.num_archives):
+            yield {
                 "description": f"archive-descr-{i}",
                 "path": f"/data/testhost/runfolders/archive-{i}",
                 "host": "testhost",
-                "uploaded": now.isoformat() if i in [
+                "uploaded": (now - datetime.timedelta(days=i)).isoformat() if i in [
                     self.first_archive, self.second_archive] else None,
                 "verified": now.isoformat() if i == self.second_archive else None,
                 "removed": now.isoformat() if i == self.second_archive else None
             }
-            for i in range(self.num_archives)
-        ]
+
+    def create_data(self, data=None):
+        archives = data or list(self.example_data())
         for i, archive in enumerate(archives):
             Archive.create(
                 description=archive["description"],
@@ -58,9 +59,8 @@ class TestDb(AsyncHTTPTestCase):
                 if archive[key]:
                     tbl.create(
                         archive=int(i+1),
-                        timestamp=now
+                        timestamp=datetime.datetime.fromisoformat(archive[key])
                     )
-
         return archives
 
     def test_db_model(self):
@@ -85,14 +85,20 @@ class TestDb(AsyncHTTPTestCase):
         self.assertEqual(len(verifications), len(removals))
 
     def test_create_new_archive_and_upload(self):
-        body = {"description": "test-case-1", "host": "testhost", "path": "/path/to/test/archive/"}
+        test_data = next(self.example_data())
+        body = {
+            "description": test_data["description"],
+            "host": test_data["host"],
+            "path": test_data["path"]
+        }
         resp = self.go("/upload", method="POST", body=body)
         resp = json_decode(resp.body)
         self.assertEqual(resp["status"], "created")
         self.assertEqual(resp["upload"]["description"], body["description"])
 
     def test_failing_upload(self):
-        body = {"description": "test-case-1"}  # missing params
+        test_data = next(self.example_data())
+        body = {"description": test_data["description"]}  # missing params
         resp = self.go("/upload", method="POST", body=body)
         self.assertEqual(resp.code, 400)
 
@@ -120,7 +126,13 @@ class TestDb(AsyncHTTPTestCase):
         body = {"age": "5", "safety_margin": "1"}
         resp = self.go("/randomarchive", method="GET", body=body)
         self.assertEqual(resp.code, 204)
-    
+
+    def test_fetch_random_unverified_archive(self):
+        self.create_data()
+        body = {"age": "1", "safety_margin": "0"}
+        resp = self.go("/randomarchive", method="GET", body=body)
+        self.assertEqual(resp.code, 200)
+
     def test_version(self):
         resp = self.go("/version", method="GET")
         self.assertEqual(resp.code, 200)
@@ -190,7 +202,9 @@ class TestDb(AsyncHTTPTestCase):
             method="POST",
             body={
                 "before_date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                "after_date": datetime.datetime.now().strftime("%Y-%m-%d")
+                "after_date": (
+                        datetime.datetime.now() - datetime.timedelta(days=self.num_archives)
+                ).strftime("%Y-%m-%d")
             })
         expected_archives = list(filter(lambda x: x["uploaded"] is not None, archives))
         _assert_response(resp, 200, expected_archives)

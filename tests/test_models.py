@@ -10,6 +10,15 @@ from tornado.testing import AsyncHTTPTestCase
 
 
 class TestDb(AsyncHTTPTestCase):
+
+    now = datetime.datetime(
+        year=2023,
+        month=6,
+        day=15,
+        hour=14,
+        minute=50,
+        second=23,
+        microsecond=123456)
     num_archives = 5
     first_archive = 1
     second_archive = 3
@@ -33,16 +42,15 @@ class TestDb(AsyncHTTPTestCase):
             allow_nonstandard_methods=True)
 
     def example_data(self):
-        now = datetime.datetime.now()
         for i in range(self.num_archives):
             yield {
                 "description": f"archive-descr-{i}",
                 "path": f"/data/testhost/runfolders/archive-{i}",
                 "host": "testhost",
-                "uploaded": str(now - datetime.timedelta(days=i)) if i in [
+                "uploaded": str(self.now - datetime.timedelta(days=i)) if i in [
                     self.first_archive, self.second_archive] else None,
-                "verified": str(now) if i == self.second_archive else None,
-                "removed": str(now) if i == self.second_archive else None
+                "verified": str(self.now) if i == self.second_archive else None,
+                "removed": str(self.now) if i == self.second_archive else None
             }
 
     def create_data(self, data=None):
@@ -127,7 +135,8 @@ class TestDb(AsyncHTTPTestCase):
         body = {
             "description": archive["description"],
             "host": archive["host"],
-            "path": archive["path"]
+            "path": archive["path"],
+            "timestamp": self.now.isoformat()
         }
 
         # recording a verification on a non-existing archive should create the archive entry
@@ -165,13 +174,21 @@ class TestDb(AsyncHTTPTestCase):
     def test_failing_fetch_random_unverified_archive(self):
         self.create_data()
         # I.e. our lookback window is [today - age - safety_margin, today - safety_margin] days.
-        body = {"age": "5", "safety_margin": "1"}
+        body = {
+            "age": "5",
+            "safety_margin": "1",
+            "today": self.now.date().isoformat()
+        }
         resp = self.go("/randomarchive", method="GET", body=body)
         self.assertEqual(resp.code, 204)
 
     def test_fetch_random_unverified_archive(self):
         archives = self.create_data()
-        body = {"age": "1", "safety_margin": "0"}
+        body = {
+            "age": "5",
+            "safety_margin": "0",
+            "today": self.now.date().isoformat()
+        }
         resp = self.go("/randomarchive", method="GET", body=body)
         self.assertEqual(resp.code, 200)
         obs_archive = json_decode(resp.body).get("archive")
@@ -247,9 +264,9 @@ class TestDb(AsyncHTTPTestCase):
             "/query",
             method="POST",
             body={
-                "uploaded_before": datetime.datetime.now().strftime("%Y-%m-%d"),
+                "uploaded_before": self.now.strftime("%Y-%m-%d"),
                 "uploaded_after": (
-                        datetime.datetime.now() - datetime.timedelta(days=self.num_archives)
+                        self.now - datetime.timedelta(days=self.num_archives)
                 ).strftime("%Y-%m-%d")
             })
         expected_archives = list(filter(lambda x: x["uploaded"] is not None, archives))

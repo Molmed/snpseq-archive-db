@@ -37,14 +37,17 @@ class UploadHandler(BaseHandler):
         :param path: Path to archive uploaded
         :param description: The unique TSM description of the archive
         :param host: From which host the archive was uploaded
+        :param timestamp: (optional) if specified, use this timestamp for the upload instead of
+        datetime.datetime.utcnow().isoformat()
         :return Information about the created object
         """
 
         body = self.decode(required_members=["path", "description", "host"])
+        tstamp = body.get("timestamp", dt.datetime.utcnow().isoformat())
         archive, created = Archive.get_or_create(
             description=body["description"], path=body["path"], host=body["host"])
 
-        upload = Upload.create(archive=archive, timestamp=dt.datetime.utcnow())
+        upload = Upload.create(archive=archive, timestamp=tstamp)
 
         self.write_json({"status": "created", "upload":
                          {"id": upload.id,
@@ -67,16 +70,19 @@ class VerificationHandler(BaseHandler):
         :param description: The unique TSM description of the archive we've verified. 
         :param path: The path to the archive that was uploaded 
         :param host: The host from which the archive was uploaded
+        :param timestamp: (optional) if specified, use this timestamp for the verification instead
+        of datetime.datetime.utcnow().isoformat()
         :return Information about the created object
         """
         body = self.decode(required_members=["description", "path", "host"])
+        tstamp = body.get("timestamp", dt.datetime.utcnow().isoformat())
 
         archive, created = Archive.get_or_create(
             description=body["description"],
             host=body["host"],
             path=body["path"])
 
-        verification = Verification.create(archive=archive, timestamp=dt.datetime.utcnow())
+        verification = Verification.create(archive=archive, timestamp=tstamp)
 
         self.write_json({"status": "created", "verification":
                         {"id": verification.id,
@@ -98,14 +104,17 @@ class RandomUnverifiedArchiveHandler(BaseHandler):
 
         :param age: Number of days we should look back when picking an unverified archive
         :param safety_margin: Number of days we should use as safety buffer
+        :param today: (optional) if specified, use this timestamp for the reference date instead of
+        datetime.datetime.utcnow().isoformat()
         :return A randomly pickedunverified archive within the specified date interval
         """
         body = self.decode(required_members=["age", "safety_margin"])
         age = int(body["age"])
         margin = int(body["safety_margin"])
+        today = body.get("today", dt.date.today().isoformat())
 
-        from_timestamp = dt.datetime.utcnow() - dt.timedelta(days=age+margin)
-        to_timestamp = dt.datetime.utcnow() - dt.timedelta(days=margin)
+        from_timestamp = dt.datetime.fromisoformat(today) - dt.timedelta(days=age+margin)
+        to_timestamp = from_timestamp + dt.timedelta(days=age)
 
         # "Give me a randomly chosen archive that was uploaded between from_timestamp and 
         # to_timestamp, and has no previous verifications"

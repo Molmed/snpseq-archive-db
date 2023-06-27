@@ -113,8 +113,6 @@ class TestDb(AsyncHTTPTestCase):
         self.assertEqual(resp.code, 400)
 
     def test_create_upload_for_existing_archive(self):
-        upload_one = 1
-        upload_two = 2
 
         test_data = next(self.example_data())
         body = {
@@ -123,7 +121,7 @@ class TestDb(AsyncHTTPTestCase):
             "path": test_data["path"]
         }
 
-        for upload_id in (upload_one, upload_two):
+        for upload_id in range(1, 3):
             resp = self.go("/upload", method="POST", body=body)
             resp = json_decode(resp.body)
             self.assertEqual(resp["status"], "created")

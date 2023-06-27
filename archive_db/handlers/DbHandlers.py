@@ -118,31 +118,30 @@ class RandomUnverifiedArchiveHandler(BaseHandler):
 
         # "Give me a randomly chosen archive that was uploaded between from_timestamp and 
         # to_timestamp, and has no previous verifications"
-        query = (Upload
-                .select()
-                .join(Verification, JOIN.LEFT_OUTER, on=(
-                    Verification.archive_id == Upload.archive_id))
-                .where(Upload.timestamp.between(from_timestamp, to_timestamp))
-                .group_by(Upload.archive_id)
-                .having(fn.Count(Verification.id) < 1)
-                .order_by(fn.Random())
-                .limit(1))
+        query = Upload\
+            .select()\
+            .join(Verification, JOIN.LEFT_OUTER, on=(
+                Verification.archive_id == Upload.archive_id))\
+            .where(Upload.timestamp.between(from_timestamp, to_timestamp))\
+            .group_by(Upload.archive_id)\
+            .having(fn.Count(Verification.id) < 1)\
+            .order_by(fn.Random())
 
         result_len = query.count()
 
         if result_len > 0:
-            for upload in query.execute():
-                archive_name = os.path.basename(os.path.normpath(upload.archive.path))
-                self.write_json({
-                    "status": "unverified",
-                    "archive": {
-                        "timestamp": str(upload.timestamp),
-                        "path": upload.archive.path,
-                        "description": upload.archive.description,
-                        "host": upload.archive.host,
-                        "archive": archive_name
-                    }
-                })
+            upload = query.first()
+            archive_name = os.path.basename(os.path.normpath(upload.archive.path))
+            self.write_json({
+                "status": "unverified",
+                "archive": {
+                    "timestamp": str(upload.timestamp),
+                    "path": upload.archive.path,
+                    "description": upload.archive.description,
+                    "host": upload.archive.host,
+                    "archive": archive_name
+                }
+            })
         else:
             msg = f"No unverified archives uploaded between {from_timestamp} and {to_timestamp} " \
                   f"was found!"

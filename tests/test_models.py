@@ -10,6 +10,15 @@ from tornado.testing import AsyncHTTPTestCase
 
 
 class TestDb(AsyncHTTPTestCase):
+
+    now = datetime.datetime(
+        year=2023,
+        month=6,
+        day=15,
+        hour=14,
+        minute=50,
+        second=23,
+        microsecond=123456)
     num_archives = 5
     first_archive = 1
     second_archive = 3
@@ -32,20 +41,20 @@ class TestDb(AsyncHTTPTestCase):
             headers={"Content-Type": "application/json"},
             allow_nonstandard_methods=True)
 
-    def create_data(self):
-        now = datetime.datetime.now()
-        archives = [
-            {
+    def example_data(self):
+        for i in range(self.num_archives):
+            yield {
                 "description": f"archive-descr-{i}",
                 "path": f"/data/testhost/runfolders/archive-{i}",
                 "host": "testhost",
-                "uploaded": now.isoformat() if i in [
+                "uploaded": str(self.now - datetime.timedelta(days=i)) if i in [
                     self.first_archive, self.second_archive] else None,
-                "verified": now.isoformat() if i == self.second_archive else None,
-                "removed": now.isoformat() if i == self.second_archive else None
+                "verified": str(self.now) if i == self.second_archive else None,
+                "removed": str(self.now) if i == self.second_archive else None
             }
-            for i in range(self.num_archives)
-        ]
+
+    def create_data(self, data=None):
+        archives = data or list(self.example_data())
         for i, archive in enumerate(archives):
             Archive.create(
                 description=archive["description"],
@@ -58,9 +67,8 @@ class TestDb(AsyncHTTPTestCase):
                 if archive[key]:
                     tbl.create(
                         archive=int(i+1),
-                        timestamp=now
+                        timestamp=datetime.datetime.fromisoformat(archive[key])
                     )
-
         return archives
 
     def test_db_model(self):
@@ -85,42 +93,107 @@ class TestDb(AsyncHTTPTestCase):
         self.assertEqual(len(verifications), len(removals))
 
     def test_create_new_archive_and_upload(self):
-        body = {"description": "test-case-1", "host": "testhost", "path": "/path/to/test/archive/"}
+        test_data = next(self.example_data())
+        body = {
+            "description": test_data["description"],
+            "host": test_data["host"],
+            "path": test_data["path"]
+        }
         resp = self.go("/upload", method="POST", body=body)
         resp = json_decode(resp.body)
         self.assertEqual(resp["status"], "created")
         self.assertEqual(resp["upload"]["description"], body["description"])
 
     def test_failing_upload(self):
-        body = {"description": "test-case-1"}  # missing params
-        resp = self.go("/upload", method="POST", body=body)
+        test_data = next(self.example_data())
+        body = {
+            "description": test_data["description"]
+        }
+        resp = self.go("/upload", method="POST", body=body) # missing params
         self.assertEqual(resp.code, 400)
 
     def test_create_upload_for_existing_archive(self):
-        upload_one = 1
-        upload_two = 2
 
-        body = {"description": "test-case-1", "host": "testhost", "path": "/path/to/test/archive/"}
-        resp = self.go("/upload", method="POST", body=body)
+        test_data = next(self.example_data())
+        body = {
+            "description": test_data["description"],
+            "host": test_data["host"],
+            "path": test_data["path"]
+        }
+
+        for upload_id in range(1, 3):
+            resp = self.go("/upload", method="POST", body=body)
+            resp = json_decode(resp.body)
+            self.assertEqual(resp["status"], "created")
+            self.assertEqual(resp["upload"]["description"], body["description"])
+            self.assertEqual(resp["upload"]["id"], upload_id)
+
+    def _verification_of_archive_helper(self, archive):
+
+        body = {
+            "description": archive["description"],
+            "host": archive["host"],
+            "path": archive["path"],
+            "timestamp": self.now.isoformat()
+        }
+
+        # recording a verification on a non-existing archive should create the archive entry
+        # on-the-fly
+        resp = self.go("/verification", method="POST", body=body)
+        self.assertEqual(resp.code, 200)
         resp = json_decode(resp.body)
         self.assertEqual(resp["status"], "created")
-        self.assertEqual(resp["upload"]["description"], body["description"])
-        self.assertEqual(resp["upload"]["id"], upload_one)
+        obs_verification = resp["verification"]
 
-        resp = self.go("/upload", method="POST", body=body)
-        resp = json_decode(resp.body)
-        self.assertEqual(resp["status"], "created")
-        self.assertEqual(resp["upload"]["id"], upload_two)
+        # query the database and ensure that one and only one archive entry exists as expected
+        resp = self.go(
+            "/query",
+            method="POST",
+            body={})
+        self.assertEqual(resp.code, 200)
+        obs_archives = json_decode(resp.body).get("archives")
+        self.assertEqual(len(obs_archives), 1)
 
-    # Populating the db in a similar way as in self.create_data() does not make the data available for 
-    # the handlers, as they seem to live in an other in-memory instance of the db. Therefore a 
-    # failing test will have to do for now. 
+        # ensure that the db field match the input data
+        for db_entity in (obs_verification, obs_archives[0]):
+            for key in ("description", "host", "path"):
+                self.assertEqual(db_entity[key], body[key])
+        self.assertEqual(obs_archives[0]["verified"], obs_verification["timestamp"])
+
+    def test_verification_of_existing_archive(self):
+        archive = next(self.example_data())
+        self.create_data(data=[archive])
+        self._verification_of_archive_helper(archive)
+
+    def test_verification_of_non_existing_archive(self):
+        archive = next(self.example_data())
+        self._verification_of_archive_helper(archive)
+
     def test_failing_fetch_random_unverified_archive(self):
-        # I.e. our lookback window is [today - 5 - 1, today - 1] days. 
-        body = {"age": "5", "safety_margin": "1"}
+        self.create_data()
+        # I.e. our lookback window is [today - age - safety_margin, today - safety_margin] days.
+        body = {
+            "age": "5",
+            "safety_margin": "1",
+            "today": self.now.date().isoformat()
+        }
         resp = self.go("/randomarchive", method="GET", body=body)
         self.assertEqual(resp.code, 204)
-    
+
+    def test_fetch_random_unverified_archive(self):
+        archives = self.create_data()
+        body = {
+            "age": "5",
+            "safety_margin": "0",
+            "today": self.now.date().isoformat()
+        }
+        resp = self.go("/randomarchive", method="GET", body=body)
+        self.assertEqual(resp.code, 200)
+        obs_archive = json_decode(resp.body).get("archive")
+        exp_archive = archives[self.first_archive]
+        for key in ("description", "host", "path"):
+            self.assertEqual(obs_archive[key], exp_archive[key])
+
     def test_version(self):
         resp = self.go("/version", method="GET")
         self.assertEqual(resp.code, 200)
@@ -189,8 +262,10 @@ class TestDb(AsyncHTTPTestCase):
             "/query",
             method="POST",
             body={
-                "before_date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                "after_date": datetime.datetime.now().strftime("%Y-%m-%d")
+                "uploaded_before": self.now.strftime("%Y-%m-%d"),
+                "uploaded_after": (
+                        self.now - datetime.timedelta(days=self.num_archives)
+                ).strftime("%Y-%m-%d")
             })
         expected_archives = list(filter(lambda x: x["uploaded"] is not None, archives))
         _assert_response(resp, 200, expected_archives)

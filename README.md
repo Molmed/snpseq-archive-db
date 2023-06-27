@@ -52,7 +52,7 @@ Print the N (positive integer) latest uploads from the database:
 
 Query the database for uploads matching specific criteria:
     
-    curl -i -X "POST" -d '{"host": "biotank", "before_date": "2023-03-01", "verified": "False"}' http://localhost:8888/api/1.0/query
+    curl -i -X "POST" -d '{"host": "biotank", "uploaded_before": "2023-03-01", "verified": "False"}' http://localhost:8888/api/1.0/query
 
 Docker container
 ----------------

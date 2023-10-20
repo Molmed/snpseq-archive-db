@@ -366,9 +366,8 @@ class RandomUnverifiedArchiveHandler(QueryHandlerBase):
                 }
             })
         else:
-            msg = f"No archives uploaded between " \
-                  f"{body['uploaded_after']} and " \
-                  f"{body['uploaded_before']} was found!"
+            criteria = ", ".join([f"{k}={v}" for k, v in body.items()])
+            msg = f"No archives matching criteria {criteria} were found!"
             self.set_status(
                 204,
                 reason=msg

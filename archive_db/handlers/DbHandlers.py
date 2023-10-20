@@ -26,7 +26,6 @@ class BaseHandler(BaseRestHandler):
         return obj
 
 
-
 class UploadHandler(BaseHandler):
 
     @gen.coroutine
@@ -92,62 +91,6 @@ class VerificationHandler(BaseHandler):
                          "host": verification.archive.host}})
 
 
-class RandomUnverifiedArchiveHandler(BaseHandler):
-
-    @gen.coroutine
-    def get(self):
-        """
-        Returns an unverified Archive object that has an associated was Upload object 
-        within the interval [today - age - margin, today - margin]. The margin value is 
-        used as a safety buffer, to make sure that the archived data has been properly 
-        flushed to tape upstreams at PDC.
-
-        :param age: Number of days we should look back when picking an unverified archive
-        :param safety_margin: Number of days we should use as safety buffer
-        :param today: (optional) if specified, use this timestamp for the reference date instead of
-        datetime.datetime.utcnow().isoformat()
-        :return A randomly pickedunverified archive within the specified date interval
-        """
-        body = self.decode(required_members=["age", "safety_margin"])
-        age = int(body["age"])
-        margin = int(body["safety_margin"])
-        today = body.get("today", dt.date.today().isoformat())
-
-        from_timestamp = dt.datetime.fromisoformat(today) - dt.timedelta(days=age+margin)
-        to_timestamp = from_timestamp + dt.timedelta(days=age)
-
-        # "Give me a randomly chosen archive that was uploaded between from_timestamp and 
-        # to_timestamp, and has no previous verifications"
-        query = Upload\
-            .select()\
-            .join(Verification, JOIN.LEFT_OUTER, on=(
-                Verification.archive_id == Upload.archive_id))\
-            .where(Upload.timestamp.between(from_timestamp, to_timestamp))\
-            .group_by(Upload.archive_id)\
-            .having(fn.Count(Verification.id) < 1)\
-            .order_by(fn.Random())
-
-        result_len = query.count()
-
-        if result_len > 0:
-            upload = query.first()
-            archive_name = os.path.basename(os.path.normpath(upload.archive.path))
-            self.write_json({
-                "status": "unverified",
-                "archive": {
-                    "timestamp": str(upload.timestamp),
-                    "path": upload.archive.path,
-                    "description": upload.archive.description,
-                    "host": upload.archive.host,
-                    "archive": archive_name
-                }
-            })
-        else:
-            msg = f"No unverified archives uploaded between {from_timestamp} and {to_timestamp} " \
-                  f"was found!"
-            self.set_status(204, reason=msg)
-
-
 # TODO: We might have to add logic in some of the services
 # that adds a file with the description inside the archive,
 # so we can verify that we're operating on the correct
@@ -210,6 +153,15 @@ class RemovalHandler(BaseHandler):
 class QueryHandlerBase(BaseHandler):
 
     @staticmethod
+    def _str_as_bool(bool_str):
+        if type(bool_str) is bool:
+            return bool_str
+        if type(bool_str) is str and bool_str.lower() in ["true", "false"]:
+            return bool_str.lower() == "true"
+        raise TypeError(
+            f"{bool_str} can not be converted to bool")
+
+    @staticmethod
     def _db_query():
 
         query = Archive.select(
@@ -231,6 +183,48 @@ class QueryHandlerBase(BaseHandler):
             Upload.timestamp.desc(),
             Archive.path.asc())
         return query
+
+    @staticmethod
+    def _filter_query(
+            query,
+            path=None,
+            description=None,
+            host=None,
+            uploaded_before=None,
+            uploaded_after=None,
+            verified=None,
+            removed=None,
+            **kwargs):
+
+        if path:
+            query = query.where(
+                Archive.path.contains(path))
+        if description:
+            query = query.where(
+                Archive.description.contains(description))
+        if host:
+            query = query.where(
+                Archive.host.contains(host))
+        if uploaded_before:
+            query = query.where(
+                Upload.timestamp <= dt.datetime.strptime(
+                    f"{uploaded_before} 23:59:59",
+                    "%Y-%m-%d %H:%M:%S"))
+        if uploaded_after:
+            query = query.where(
+                Upload.timestamp >= dt.datetime.strptime(
+                    uploaded_after,
+                    "%Y-%m-%d"))
+        if verified is not None:
+            query = query.where(
+                Verification.timestamp.is_null(
+                    not QueryHandlerBase._str_as_bool(verified)))
+        if removed is not None:
+            query = query.where(
+                Removal.timestamp.is_null(
+                    not QueryHandlerBase._str_as_bool(removed)))
+
+        return query.dicts()
 
     def _do_query(self, query):
         if query:
@@ -304,29 +298,80 @@ class QueryHandler(QueryHandlerBase):
         under the key "archives"
         """
         body = self.decode()
-        query = self._db_query()
-
-        if body.get("path"):
-            query = query.where(Archive.path.contains(body["path"]))
-        if body.get("description"):
-            query = query.where(Archive.description.contains(body["description"]))
-        if body.get("host"):
-            query = query.where(Archive.host.contains(body["host"]))
-        if body.get("uploaded_before"):
-            query = query.where(
-                Upload.timestamp <= dt.datetime.strptime(
-                    f"{body['uploaded_before']} 23:59:59",
-                    "%Y-%m-%d %H:%M:%S"))
-        if body.get("uploaded_after"):
-            query = query.where(
-                Upload.timestamp >= dt.datetime.strptime(body["uploaded_after"], "%Y-%m-%d"))
-        if body.get("verified") is not None and body["verified"] in ["True", "False"]:
-            query = query.where(Verification.timestamp.is_null(body["verified"] == "False"))
-        if body.get("removed") is not None and body["removed"] in ["True", "False"]:
-            query = query.where(Removal.timestamp.is_null(body["removed"] == "False"))
-
-        query = (query.dicts())
+        query = self._filter_query(
+            self._db_query(),
+            **body)
         self._do_query(query)
+
+
+class RandomUnverifiedArchiveHandler(QueryHandlerBase):
+
+    @gen.coroutine
+    def get(self):
+        """
+        For backwards compability, forward this GET request to the POST handler
+        """
+        self.post()
+
+    @gen.coroutine
+    def post(self):
+        """
+        Returns an unverified Archive object that has an associated was Upload object
+        within the interval [today - age - margin, today - margin]. The margin value is
+        used as a safety buffer, to make sure that the archived data has been properly
+        flushed to tape upstreams at PDC.
+
+        :param age: Number of days we should look back when picking an unverified archive
+        :param safety_margin: Number of days we should use as safety buffer
+        :param today: (optional) if specified, use this timestamp for the reference date instead of
+        datetime.datetime.utcnow().isoformat()
+        :return A randomly pickedunverified archive within the specified date interval
+        """
+        body = self.decode(
+            required_members=[
+                "age",
+                "safety_margin"])
+        age = int(body["age"])
+        margin = int(body["safety_margin"])
+        today = body.get("today", dt.date.today().isoformat())
+
+        from_timestamp = dt.datetime.fromisoformat(today) - dt.timedelta(days=age+margin)
+        to_timestamp = from_timestamp + dt.timedelta(days=age)
+
+        body["uploaded_before"] = to_timestamp.date().isoformat()
+        body["uploaded_after"] = from_timestamp.date().isoformat()
+        body["verified"] = False
+
+        query = self._filter_query(
+            self._db_query(),
+            **body)
+
+        result_len = query.count()
+
+        if result_len > 0:
+            upload = query.first()
+            archive_name = os.path.basename(
+                os.path.normpath(
+                    upload["path"]
+                )
+            )
+            self.write_json({
+                "status": "unverified",
+                "archive": {
+                    "timestamp": str(upload["uploaded"]),
+                    "path": upload["path"],
+                    "description": upload["description"],
+                    "host": upload["host"],
+                    "archive": archive_name
+                }
+            })
+        else:
+            criteria = ", ".join([f"{k}={v}" for k, v in body.items()])
+            msg = f"No archives matching criteria {criteria} were found!"
+            self.set_status(
+                204,
+                reason=msg
+            )
 
 
 class VersionHandler(BaseHandler):

@@ -22,6 +22,7 @@ class TestDb(AsyncHTTPTestCase):
     num_archives = 5
     first_archive = 1
     second_archive = 3
+    third_archive = 4
 
     API_BASE = "/api/1.0"
 
@@ -48,8 +49,9 @@ class TestDb(AsyncHTTPTestCase):
                 "path": f"/data/testhost/runfolders/archive-{i}",
                 "host": "testhost",
                 "uploaded": str(self.now - datetime.timedelta(days=i)) if i in [
-                    self.first_archive, self.second_archive] else None,
-                "verified": str(self.now) if i == self.second_archive else None,
+                    self.first_archive, self.second_archive, self.third_archive] else None,
+                "verified": str(self.now) if i in [
+                    self.second_archive] else None,
                 "removed": str(self.now) if i == self.second_archive else None
             }
 
@@ -173,8 +175,8 @@ class TestDb(AsyncHTTPTestCase):
         self.create_data()
         # I.e. our lookback window is [today - age - safety_margin, today - safety_margin] days.
         body = {
-            "age": "5",
-            "safety_margin": "1",
+            "age": "1",
+            "safety_margin": "2",
             "today": self.now.date().isoformat()
         }
         resp = self.go("/randomarchive", method="GET", body=body)
@@ -183,14 +185,29 @@ class TestDb(AsyncHTTPTestCase):
     def test_fetch_random_unverified_archive(self):
         archives = self.create_data()
         body = {
-            "age": "5",
-            "safety_margin": "0",
+            "age": "2",
+            "safety_margin": "1",
             "today": self.now.date().isoformat()
         }
         resp = self.go("/randomarchive", method="GET", body=body)
         self.assertEqual(resp.code, 200)
         obs_archive = json_decode(resp.body).get("archive")
         exp_archive = archives[self.first_archive]
+        for key in ("description", "host", "path"):
+            self.assertEqual(obs_archive[key], exp_archive[key])
+
+    def test_fetch_random_archive_with_criteria(self):
+        archives = self.create_data()
+        body = {
+            "age": "5",
+            "safety_margin": "2",
+            "description": f"-{self.third_archive}",
+            "today": self.now.date().isoformat()
+        }
+        resp = self.go("/randomarchive", method="POST", body=body)
+        self.assertEqual(resp.code, 200)
+        obs_archive = json_decode(resp.body).get("archive")
+        exp_archive = archives[self.third_archive]
         for key in ("description", "host", "path"):
             self.assertEqual(obs_archive[key], exp_archive[key])
 
